@@ -105,20 +105,16 @@ class ErnieModel(object):
                 name=self._sent_emb_name, initializer=self._param_initializer))
 
         emb_out = emb_out + position_emb_out
-        emb_out = emb_out + sent_emb_out
+        # emb_out = emb_out + sent_emb_out
 
         emb_out = pre_process_layer(
             emb_out, 'nd', self._prepostprocess_dropout, name='pre_encoder')
 
         if self._dtype == "float16":
             input_mask = fluid.layers.cast(x=input_mask, dtype=self._dtype)
-        self_attn_mask = fluid.layers.matmul(
-            x=input_mask, y=input_mask, transpose_y=True)
 
-        self_attn_mask = fluid.layers.scale(
-            x=self_attn_mask, scale=10000.0, bias=-1.0, bias_after_scale=False)
         n_head_self_attn_mask = fluid.layers.stack(
-            x=[self_attn_mask] * self._n_head, axis=1)
+            x=[input_mask] * self._n_head, axis=1)
         n_head_self_attn_mask.stop_gradient = True
 
         self._enc_out = encoder(
@@ -155,13 +151,11 @@ class ErnieModel(object):
             bias_attr="pooled_fc.b_0")
         return next_sent_feat
 
-    def get_pretraining_output(self, mask_label, mask_pos, labels):
+    def get_pretraining_output(self, mask_label, mask_pos, labels, next_sen_coef=1.0):
         """Get the loss & accuracy for pretraining"""
 
         mask_pos = fluid.layers.cast(x=mask_pos, dtype='int32')
 
-        # extract the first token feature in each sentence
-        next_sent_feat = self.get_pooled_output()
         reshaped_emb_out = fluid.layers.reshape(
             x=self._enc_out, shape=[-1, self._emb_size])
         # extract masked tokens' feature
@@ -205,8 +199,12 @@ class ErnieModel(object):
 
         mask_lm_loss = fluid.layers.softmax_with_cross_entropy(
             logits=fc_out, label=mask_label)
-        mean_mask_lm_loss = fluid.layers.mean(mask_lm_loss)
+        # mean_mask_lm_loss = fluid.layers.mean(mask_lm_loss)
+        mean_mask_lm_loss = fluid.layers.reduce_sum(mask_lm_loss, dim=1)
+        mean_mask_lm_loss = fluid.layers.mean(mean_mask_lm_loss)
 
+        # extract the first token feature in each sentence
+        next_sent_feat = self.get_pooled_output()
         next_sent_fc_out = fluid.layers.fc(
             input=next_sent_feat,
             size=2,
@@ -221,6 +219,6 @@ class ErnieModel(object):
             input=next_sent_softmax, label=labels)
 
         mean_next_sent_loss = fluid.layers.mean(next_sent_loss)
+        loss = mean_mask_lm_loss + mean_next_sent_loss * next_sen_coef
 
-        loss = mean_next_sent_loss + mean_mask_lm_loss
         return next_sent_acc, mean_mask_lm_loss, loss

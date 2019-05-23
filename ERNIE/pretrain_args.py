@@ -33,7 +33,7 @@ model_g.add_arg("generate_neg_sample",    bool, False,                         "
 
 train_g = ArgumentGroup(parser, "training", "training options.")
 train_g.add_arg("epoch",             int,    100,     "Number of epoches for training.")
-train_g.add_arg("learning_rate",     float,  0.0001,  "Learning rate used to train with warmup.")
+train_g.add_arg("learning_rate",     float,  6.25e-5,  "Learning rate used to train with warmup.")
 train_g.add_arg("lr_scheduler",      str,    "linear_warmup_decay",
                 "scheduler of learning rate.", choices=['linear_warmup_decay', 'noam_decay'])
 train_g.add_arg("weight_decay",      float,  0.01,    "Weight decay rate for L2 regularizer.")
@@ -44,18 +44,19 @@ train_g.add_arg("validation_steps",  int,    1000,    "The steps interval to eva
 train_g.add_arg("use_fp16",          bool,   False,   "Whether to use fp16 mixed precision training.")
 train_g.add_arg("loss_scaling",      float,  1.0,
                 "Loss scaling factor for mixed precision training, only valid when use_fp16 is enabled.")
+train_g.add_arg("next_sen_coef",     float,  0.0,  "Weight of next sentence train loss.")
 
 log_g = ArgumentGroup(parser,     "logging", "logging related.")
-log_g.add_arg("skip_steps",          int,    10,    "The steps interval to print loss.")
+log_g.add_arg("skip_steps",          int,    100,    "The steps interval to print loss.")
 log_g.add_arg("verbose",             bool,   False, "Whether to output verbose log.")
 
 data_g = ArgumentGroup(parser, "data", "Data paths, vocab paths and data processing options")
 data_g.add_arg("train_filelist",           str,  "",  "Path to training filelist.")
 data_g.add_arg("valid_filelist",           str,  "",  "Path to valid filelist.")
 data_g.add_arg("test_filelist",            str,  "",  "Path to test filelist.")
-data_g.add_arg("vocab_path",          str,  "./config/vocab.txt",  "Vocabulary path.")
-data_g.add_arg("max_seq_len",         int,  512,                   "Number of words of the longest seqence.")
-data_g.add_arg("batch_size",          int,  16,                    "Total examples' number in batch for training. see also --in_tokens.")
+data_g.add_arg("vocab_path",          str,  "./config/baidu_vocab.txt",  "Vocabulary path.")
+data_g.add_arg("max_seq_len",         int,  128,                   "Number of words of the longest seqence.")
+data_g.add_arg("batch_size",          int,  32,                    "Total examples' number in batch for training. see also --in_tokens.")
 data_g.add_arg("in_tokens",           bool, False,
               "If set, the batch size will be the maximum number of tokens in one batch. "
               "Otherwise, it will be the maximum number of examples in one batch.")
@@ -65,4 +66,7 @@ run_type_g.add_arg("is_distributed",    bool,   False,  "If set, then start dist
 run_type_g.add_arg("use_cuda",          bool,   True,   "If set, use GPU for training.")
 run_type_g.add_arg("use_fast_executor", bool,   False,  "If set, use fast parallel executor (in experiment).")
 run_type_g.add_arg("do_test",           bool,   False,  "Whether to perform evaluation on test data set.")
+run_type_g.add_arg("is_bidirection",    bool,   False,  "If set, then start pre-training masked lm. "
+                                                        "Otherwise, start pre-training unidirectional lm like GPT.")
+
 # yapf: enable

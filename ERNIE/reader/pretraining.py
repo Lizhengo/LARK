@@ -41,7 +41,9 @@ class ErnieDataReader(object):
                  epoch=100,
                  voc_size=0,
                  is_test=False,
-                 generate_neg_sample=False):
+                 in_tokens=False,
+                 generate_neg_sample=False,
+                 is_bidirection=False):
 
         self.vocab = self.load_vocab(vocab_path)
         self.filelist = filelist
@@ -60,7 +62,10 @@ class ErnieDataReader(object):
         self.mask_id = self.vocab["[MASK]"]
         self.is_test = is_test
         self.generate_neg_sample = generate_neg_sample
-        assert self.batch_size > 100, "Current batch size means total token's number, \
+        self.in_tokens = in_tokens
+        self.is_bidirection = is_bidirection
+        if self.in_tokens:
+            assert self.batch_size > 100, "Current batch size means total token's number, \
                                        it should not be set to too small number."
 
         if self.is_test:
@@ -92,13 +97,17 @@ class ErnieDataReader(object):
 
     def read_file(self, file):
         assert file.endswith('.gz'), "[ERROR] %s is not a gzip file" % file
-        with gzip.open(file, "rb") as f:
-            for line in f:
-                parsed_line = self.parse_line(
-                    line, max_seq_len=self.max_seq_len)
-                if parsed_line is None:
-                    continue
-                yield parsed_line
+        f = gzip.open(file, "rb").readlines()
+        if self.shuffle_files:
+            print("begin shuffle data")
+            np.random.shuffle(f)
+            print("end shuffle data")
+        for line in f:
+            parsed_line = self.parse_line(
+                line, max_seq_len=self.max_seq_len)
+            if parsed_line is None:
+                continue
+            yield parsed_line
 
     def convert_to_unicode(self, text):
         """Converts `text` to Unicode (if it's not already), assuming utf-8 input."""
@@ -272,7 +281,12 @@ class ErnieDataReader(object):
                 for parsed_line in reader():
                     token_ids, sent_ids, pos_ids, label, seg_labels, mask_word = parsed_line
                     max_len = max(max_len, len(token_ids))
-                    if (len(batch) + 1) * max_len <= batch_size:
+                    if self.in_tokens:
+                        to_append = (len(batch) + 1) * max_len <= batch_size
+                    else:
+                        to_append = len(batch) < batch_size
+
+                    if to_append:
                         batch.append(parsed_line)
                         total_token_num += len(token_ids)
                     else:
@@ -295,7 +309,8 @@ class ErnieDataReader(object):
                     mask_id=self.mask_id,
                     return_input_mask=True,
                     return_max_len=False,
-                    return_num_token=False)
+                    return_num_token=False,
+                    is_bidirection=self.is_bidirection)
 
         return wrapper
 

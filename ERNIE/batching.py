@@ -29,7 +29,8 @@ def mask(batch_tokens,
          vocab_size,
          CLS=1,
          SEP=2,
-         MASK=3):
+         MASK=3,
+         is_bidirection=False):
     """
     Add mask for batch_tokens, return out, mask_label, mask_pos;
     Note: mask_pos responding the batch_tokens after padded;
@@ -37,83 +38,89 @@ def mask(batch_tokens,
     max_len = max([len(sent) for sent in batch_tokens])
     mask_label = []
     mask_pos = []
-    prob_mask = np.random.rand(total_token_num)
-    # Note: the first token is [CLS], so [low=1]
-    replace_ids = np.random.randint(1, high=vocab_size, size=total_token_num)
-    pre_sent_len = 0
-    prob_index = 0
-    for sent_index, sent in enumerate(batch_tokens):
-        mask_flag = False
-        mask_word = mask_word_tags[sent_index]
-        prob_index += pre_sent_len
-        if mask_word:
-            beg = 0
-            for token_index, token in enumerate(sent):
-                seg_label = seg_labels[sent_index][token_index]
-                if seg_label == 1:
-                    continue
-                if beg == 0:
-                    if seg_label != -1:
+    if is_bidirection:
+        prob_mask = np.random.rand(total_token_num)
+        # Note: the first token is [CLS], so [low=1]
+        replace_ids = np.random.randint(1, high=vocab_size, size=total_token_num)
+        pre_sent_len = 0
+        prob_index = 0
+        for sent_index, sent in enumerate(batch_tokens):
+            mask_flag = False
+            mask_word = mask_word_tags[sent_index]
+            prob_index += pre_sent_len
+            if mask_word:
+                beg = 0
+                for token_index, token in enumerate(sent):
+                    seg_label = seg_labels[sent_index][token_index]
+                    if seg_label == 1:
+                        continue
+                    if beg == 0:
+                        if seg_label != -1:
+                            beg = token_index
+                        continue
+
+                    prob = prob_mask[prob_index + beg]
+                    if prob > 0.15:
+                        pass
+                    else:
+                        for index in xrange(beg, token_index):
+                            prob = prob_mask[prob_index + index]
+                            base_prob = 1.0
+                            if index == beg:
+                                base_prob = 0.15
+                            if base_prob * 0.2 < prob <= base_prob:
+                                mask_label.append(sent[index])
+                                sent[index] = MASK
+                                mask_flag = True
+                                mask_pos.append(sent_index * max_len + index)
+                            elif base_prob * 0.1 < prob <= base_prob * 0.2:
+                                mask_label.append(sent[index])
+                                sent[index] = replace_ids[prob_index + index]
+                                mask_flag = True
+                                mask_pos.append(sent_index * max_len + index)
+                            else:
+                                mask_label.append(sent[index])
+                                mask_pos.append(sent_index * max_len + index)
+
+                    if seg_label == -1:
+                        beg = 0
+                    else:
                         beg = token_index
-                    continue
-
-                prob = prob_mask[prob_index + beg]
-                if prob > 0.15:
-                    pass
-                else:
-                    for index in xrange(beg, token_index):
-                        prob = prob_mask[prob_index + index]
-                        base_prob = 1.0
-                        if index == beg:
-                            base_prob = 0.15
-                        if base_prob * 0.2 < prob <= base_prob:
-                            mask_label.append(sent[index])
-                            sent[index] = MASK
+            else:
+                for token_index, token in enumerate(sent):
+                    prob = prob_mask[prob_index + token_index]
+                    if prob > 0.15:
+                        continue
+                    elif 0.03 < prob <= 0.15:
+                        # mask
+                        if token != SEP and token != CLS:
+                            mask_label.append(sent[token_index])
+                            sent[token_index] = MASK
                             mask_flag = True
-                            mask_pos.append(sent_index * max_len + index)
-                        elif base_prob * 0.1 < prob <= base_prob * 0.2:
-                            mask_label.append(sent[index])
-                            sent[index] = replace_ids[prob_index + index]
+                            mask_pos.append(sent_index * max_len + token_index)
+                    elif 0.015 < prob <= 0.03:
+                        # random replace
+                        if token != SEP and token != CLS:
+                            mask_label.append(sent[token_index])
+                            sent[token_index] = replace_ids[prob_index +
+                                                            token_index]
                             mask_flag = True
-                            mask_pos.append(sent_index * max_len + index)
-                        else:
-                            mask_label.append(sent[index])
-                            mask_pos.append(sent_index * max_len + index)
+                            mask_pos.append(sent_index * max_len + token_index)
+                    else:
+                        # keep the original token
+                        if token != SEP and token != CLS:
+                            mask_label.append(sent[token_index])
+                            mask_pos.append(sent_index * max_len + token_index)
 
-                if seg_label == -1:
-                    beg = 0
-                else:
-                    beg = token_index
-        else:
-            for token_index, token in enumerate(sent):
-                prob = prob_mask[prob_index + token_index]
-                if prob > 0.15:
-                    continue
-                elif 0.03 < prob <= 0.15:
-                    # mask
-                    if token != SEP and token != CLS:
-                        mask_label.append(sent[token_index])
-                        sent[token_index] = MASK
-                        mask_flag = True
-                        mask_pos.append(sent_index * max_len + token_index)
-                elif 0.015 < prob <= 0.03:
-                    # random replace
-                    if token != SEP and token != CLS:
-                        mask_label.append(sent[token_index])
-                        sent[token_index] = replace_ids[prob_index +
-                                                        token_index]
-                        mask_flag = True
-                        mask_pos.append(sent_index * max_len + token_index)
-                else:
-                    # keep the original token
-                    if token != SEP and token != CLS:
-                        mask_label.append(sent[token_index])
-                        mask_pos.append(sent_index * max_len + token_index)
-
-        pre_sent_len = len(sent)
+            pre_sent_len = len(sent)
+    else:
+        for sent_index, sent in enumerate(batch_tokens):
+            mask_label.extend(sent[1:])
+            mask_pos.extend([sent_index * max_len + i for i in range(len(sent[1:]))])
 
     mask_label = np.array(mask_label).astype("int64").reshape([-1, 1])
     mask_pos = np.array(mask_pos).astype("int64").reshape([-1, 1])
+
     return batch_tokens, mask_label, mask_pos
 
 
@@ -126,7 +133,8 @@ def prepare_batch_data(insts,
                        mask_id=None,
                        return_input_mask=True,
                        return_max_len=True,
-                       return_num_token=False):
+                       return_num_token=False,
+                       is_bidirection=False):
 
     batch_src_ids = [inst[0] for inst in insts]
     batch_sent_ids = [inst[1] for inst in insts]
@@ -146,11 +154,12 @@ def prepare_batch_data(insts,
         vocab_size=voc_size,
         CLS=cls_id,
         SEP=sep_id,
-        MASK=mask_id)
+        MASK=mask_id,
+        is_bidirection=is_bidirection)
 
     # Second step: padding
     src_id, self_input_mask = pad_batch_data(
-        out, pad_idx=pad_id, return_input_mask=True)
+        out, is_bidirection=is_bidirection, pad_idx=pad_id, return_input_mask=True)
     pos_id = pad_batch_data(batch_pos_ids, pad_idx=pad_id)
     sent_id = pad_batch_data(batch_sent_ids, pad_idx=pad_id)
 
@@ -163,6 +172,7 @@ def prepare_batch_data(insts,
 
 def pad_batch_data(insts,
                    pad_idx=0,
+                   is_bidirection=False,
                    return_pos=False,
                    return_input_mask=False,
                    return_max_len=False,
@@ -191,10 +201,22 @@ def pad_batch_data(insts,
         return_list += [inst_pos.astype("int64").reshape([-1, max_len, 1])]
 
     if return_input_mask:
-        # This is used to avoid attention on paddings.
-        input_mask_data = np.array([[1] * len(inst) + [0] *
-                                    (max_len - len(inst)) for inst in insts])
-        input_mask_data = np.expand_dims(input_mask_data, axis=-1)
+        if is_bidirection:
+            # This is used to avoid attention on paddings.
+            input_mask_data = np.array([[0] * len(inst) +
+                                        [-1e9] * (max_len - len(inst))
+                                        for inst in insts])
+            input_mask_data = np.tile(
+                input_mask_data.reshape([-1, 1, max_len]),
+                [1, max_len, 1])
+
+        else:
+            # This is used to avoid attention on paddings and subsequent words.
+            input_mask_data = np.ones((inst_data.shape[0], max_len, max_len))
+
+            input_mask_data = np.triu(input_mask_data,
+                                         1).reshape([-1, max_len, max_len]) * [-1e9]
+
         return_list += [input_mask_data.astype("float32")]
 
     if return_max_len:
