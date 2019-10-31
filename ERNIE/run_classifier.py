@@ -176,6 +176,12 @@ def main(args):
             loss_name=graph_vars["loss"].name,
             exec_strategy=exec_strategy,
             main_program=train_program)
+        
+        if args.batch_merge_repeat > 1:
+            build_stra = fluid.BuildStrategy()
+            pass_builder = build_stra._finalize_strategy_and_create_passes()
+            mypass = pass_builder.insert_pass(0, "multi_batch_merge_pass")
+            mypass.set("num_repeats", args.batch_merge_repeat)
 
         train_pyreader.decorate_tensor_provider(train_data_generator)
     else:
@@ -186,7 +192,8 @@ def main(args):
         steps = 0
         if warmup_steps > 0:
             graph_vars["learning_rate"] = scheduled_lr
-
+        epoch_id = 0
+        current_epoch = 0
         time_begin = time.time()
         while True:
             try:
@@ -215,33 +222,50 @@ def main(args):
                            args.skip_steps / used_time))
                     time_begin = time.time()
 
-                if steps % args.save_steps == 0:
+                # if steps % args.save_steps == 0:
+                #    save_path = os.path.join(args.checkpoints,
+                #                             "step_" + str(steps))
+                #    fluid.io.save_persistables(exe, save_path, train_program)
+                
+                if epoch_id != current_epoch:
                     save_path = os.path.join(args.checkpoints,
-                                             "step_" + str(steps))
+                            "epoch_" + str(epoch_id))
                     fluid.io.save_persistables(exe, save_path, train_program)
 
-                if steps % args.validation_steps == 0:
+                if steps % args.validation_steps == 0 or epoch_id != current_epoch:
+                    print("start valid in step: %d" % (steps))
                     # evaluate dev set
                     if args.do_val:
                         test_pyreader.decorate_tensor_provider(
                             reader.data_generator(
                                 args.dev_set,
-                                batch_size=args.batch_size,
+                                batch_size=args.batch_size / 2,
                                 epoch=1,
                                 shuffle=False))
+                        if epoch_id != current_epoch:
+                            eval_phase = "epoch_" + str(epoch_id) + "_dev"
+                        else:
+                            eval_phase = "dev"
                         evaluate(exe, test_prog, test_pyreader, graph_vars,
-                                 "dev")
+                                 eval_phase)
                     # evaluate test set
                     if args.do_test:
                         test_pyreader.decorate_tensor_provider(
                             reader.data_generator(
                                 args.test_set,
-                                batch_size=args.batch_size,
+                                batch_size=args.batch_size / 2,
                                 epoch=1,
                                 shuffle=False))
+                        if epoch_id != current_epoch:
+                            eval_phase = "epoch_" + str(epoch_id) + "_test"
+                        else:
+                            eval_phase = "test"
                         evaluate(exe, test_prog, test_pyreader, graph_vars,
-                                 "test")
+                                 eval_phase)
+                epoch_id = current_epoch
+
             except fluid.core.EOFException:
+                print("save epochs:", str(steps))
                 save_path = os.path.join(args.checkpoints, "step_" + str(steps))
                 fluid.io.save_persistables(exe, save_path, train_program)
                 train_pyreader.reset()

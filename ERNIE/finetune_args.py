@@ -34,6 +34,7 @@ model_g.add_arg("checkpoints",              str,  "checkpoints",  "Path to save 
 
 train_g = ArgumentGroup(parser, "training", "training options.")
 train_g.add_arg("epoch",             int,    3,       "Number of epoches for fine-tuning.")
+train_g.add_arg("batch_merge_repeat",             int,    1,       "Number of batch merge.")
 train_g.add_arg("learning_rate",     float,  5e-5,    "Learning rate used to train with warmup.")
 train_g.add_arg("lr_scheduler",      str,    "linear_warmup_decay",
                 "scheduler of learning rate.", choices=['linear_warmup_decay', 'noam_decay'])

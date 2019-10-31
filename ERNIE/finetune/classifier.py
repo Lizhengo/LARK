@@ -22,9 +22,10 @@ import numpy as np
 
 from six.moves import xrange
 import paddle.fluid as fluid
-
+import AUC
 from model.ernie import ErnieModel
 
+print_score=False
 
 def create_model(args, pyreader_name, ernie_config, is_prediction=False):
     pyreader = fluid.layers.py_reader(
@@ -68,9 +69,24 @@ def create_model(args, pyreader_name, ernie_config, is_prediction=False):
             src_ids.name, pos_ids.name, sent_ids.name, input_mask.name
         ]
         return pyreader, probs, feed_targets_name
+    
+    def focal_loss(logits, labels):
+        probs = fluid.layers.softmax(logits)
+        probs_0 = fluid.layers.reshape(fluid.layers.slice(
+             input=probs, axes=[1], starts=[0], ends=[1]) ,shape=[-1,1])
+        probs_1 = fluid.layers.reshape(fluid.layers.slice(
+            input=probs, axes=[1], starts=[1], ends=[2]) ,shape=[-1,1])
+        gamma = 2.0
+        f_labels = fluid.layers.cast(labels, 'float32')
+        ce_loss = -10 * f_labels * fluid.layers.log(probs_1) - (1 - f_labels) * fluid.layers.log(probs_0)
+        # ce_loss = 0 - 1 * f_labels * fluid.layers.pow(probs_0, gamma) * fluid.layers.log(probs_1) \
+        #    - (1 - f_labels) * fluid.layers.pow(probs_1, gamma) * fluid.layers.log(probs_0) 
+        return ce_loss, probs
+    
+    ce_loss, probs = focal_loss(logits=logits, labels=labels)
 
-    ce_loss, probs = fluid.layers.softmax_with_cross_entropy(
-        logits=logits, label=labels, return_softmax=True)
+    # ce_loss, probs = fluid.layers.softmax_with_cross_entropy(
+    #    logits=logits, label=labels, return_softmax=True)
     loss = fluid.layers.mean(x=ce_loss)
 
     if args.use_fp16 and args.loss_scaling > 1.0:
@@ -156,11 +172,12 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
         outputs = exe.run(fetch_list=train_fetch_list)
         ret = {"loss": np.mean(outputs[0]), "accuracy": np.mean(outputs[1])}
         if "learning_rate" in graph_vars:
-            ret["learning_rate"] = float(outputs[4][0])
+            ret["learning_rate"] = float(outputs[3][0])
         return ret
 
     test_pyreader.start()
-    total_cost, total_acc, total_num_seqs, total_label_pos_num, total_pred_pos_num, total_correct_num = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    total_cost, total_acc, total_num_seqs, total_label_pos_num, total_pred_pos_num, total_correct_num, \
+            total_label_neg_num, total_pred_neg_num, total_neg_correct_num = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     qids, labels, scores = [], [], []
     time_begin = time.time()
 
@@ -169,34 +186,65 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
         graph_vars["probs"].name, graph_vars["labels"].name,
         graph_vars["num_seqs"].name, graph_vars["qids"].name
     ]
+    batch_id = 0
     while True:
         try:
+            batch_id += 1
             np_loss, np_acc, np_probs, np_labels, np_num_seqs, np_qids = exe.run(
                 program=test_program, fetch_list=fetch_list)
             total_cost += np.sum(np_loss * np_num_seqs)
             total_acc += np.sum(np_acc * np_num_seqs)
             total_num_seqs += np.sum(np_num_seqs)
             labels.extend(np_labels.reshape((-1)).tolist())
-            qids.extend(np_qids.reshape(-1).tolist())
+            #####qids.extend(np_qids.reshape(-1).tolist())
             scores.extend(np_probs[:, 1].reshape(-1).tolist())
             np_preds = np.argmax(np_probs, axis=1).astype(np.float32)
             total_label_pos_num += np.sum(np_labels)
             total_pred_pos_num += np.sum(np_preds)
             total_correct_num += np.sum(np.dot(np_preds, np_labels))
+            
+            np_labels = np_labels.reshape(-1)
+            total_neg_correct_num += np.sum((np_preds + np_labels)==0)
+            total_label_neg_num += np.sum(np_labels == 0)
+            total_pred_neg_num += np.sum(np_preds == 0)
+
+            if print_score: 
+                if (batch_id % 100) == 0:
+                    fs = open("predict_scores.txt", "a+")
+                    for score in scores:
+                        fs.write(str(score) + "\n")
+                    fs.close()
+                    qids, labels, scores = [], [], []
+                    print("processed batch num: ", batch_id)
+
         except fluid.core.EOFException:
             test_pyreader.reset()
             break
+    
+    if print_score:
+        fs = open("predict_scores.txt", "a+")
+        for score in scores:
+            fs.write(str(score) + "\n")
+        fs.close()
+
     time_end = time.time()
+    
+    pos_r = total_correct_num / total_label_pos_num
+    pos_p = total_correct_num / total_pred_pos_num
+    pos_f = 2 * pos_p * pos_r / (pos_p + pos_r)
+
+    neg_r = total_neg_correct_num / total_label_neg_num
+    neg_p = total_neg_correct_num / total_pred_neg_num
+    neg_f = 2 * neg_p * neg_r / (neg_p + neg_r)
+
+    auc = AUC.auc(labels, scores)
 
     if len(qids) == 0:
         print(
-            "[%s evaluation] ave loss: %f, ave acc: %f, data_num: %d, elapsed time: %f s"
+                "[%s evaluation] ave loss: %f, ave acc: %f, pos p: %f, pos r: %f, pos f1: %f, neg p: %f, neg r: %f, neg f1: %f, auc: %f, data_num: %d, elapsed time: %f s"
             % (eval_phase, total_cost / total_num_seqs, total_acc /
-               total_num_seqs, total_num_seqs, time_end - time_begin))
+               total_num_seqs, pos_p, pos_r, pos_f, neg_p, neg_r, neg_f, auc, total_num_seqs, time_end - time_begin))
     else:
-        r = total_correct_num / total_label_pos_num
-        p = total_correct_num / total_pred_pos_num
-        f = 2 * p * r / (p + r)
 
         assert len(qids) == len(labels) == len(scores)
         preds = sorted(
@@ -205,7 +253,7 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
         map = evaluate_map(preds)
 
         print(
-            "[%s evaluation] ave loss: %f, ave_acc: %f, mrr: %f, map: %f, p: %f, r: %f, f1: %f, data_num: %d, elapsed time: %f s"
+                "[%s evaluation] ave loss: %f, ave_acc: %f, mrr: %f, map: %f, p: %f, r: %f, f1: %f, auc: %f, data_num: %d, elapsed time: %f s"
             % (eval_phase, total_cost / total_num_seqs,
-               total_acc / total_num_seqs, mrr, map, p, r, f, total_num_seqs,
+               total_acc / total_num_seqs, mrr, map, p, r, f, auc, total_num_seqs,
                time_end - time_begin))

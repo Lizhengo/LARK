@@ -9,18 +9,18 @@ python -u run_classifier.py \
                    --do_train true \
                    --do_val true \
                    --do_test true \
-                   --batch_size 32 \
-                   --init_pretraining_params ${MODEL_PATH}/params \
-                   --train_set ${TASK_DATA_PATH}/lcqmc/train.tsv \
-                   --dev_set ${TASK_DATA_PATH}/lcqmc/dev.tsv \
-                   --test_set ${TASK_DATA_PATH}/lcqmc/test.tsv \
+                   --batch_size 64 \
+                   --init_pretraining_params ./ernie_checkpoint/params/ \
+                   --train_set ${TRAIN_DATA_PATH} \
+                   --dev_set ${DEV_DATA_PATH} \
+                   --test_set ${TEST_DATA_PATH} \
                    --vocab_path config/vocab.txt \
-                   --checkpoints ./checkpoints \
-                   --save_steps 1000 \
+                   --checkpoints ./model_checkpoint \
+                   --save_steps 2000 \
                    --weight_decay  0.0 \
                    --warmup_proportion 0.0 \
-                   --validation_steps 100 \
-                   --epoch 3 \
+                   --validation_steps 2000 \
+                   --epoch 10 \
                    --max_seq_len 128 \
                    --ernie_config_path config/ernie_config.json \
                    --learning_rate 2e-5 \

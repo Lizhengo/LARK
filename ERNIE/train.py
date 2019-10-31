@@ -41,7 +41,7 @@ def create_model(pyreader_name, ernie_config):
     pyreader = fluid.layers.py_reader(
         capacity=70,
         shapes=[[-1, args.max_seq_len, 1], [-1, args.max_seq_len, 1],
-                [-1, args.max_seq_len, 1], [-1, args.max_seq_len, args.max_seq_len], [-1, 1],
+                [-1, args.max_seq_len, 1], [-1, args.max_seq_len, 1], [-1, 1],
                 [-1, 1], [-1, 1]],
         dtypes=[
             'int64', 'int64', 'int64', 'float32', 'int64', 'int64', 'int64'
@@ -63,7 +63,7 @@ def create_model(pyreader_name, ernie_config):
         use_fp16=args.use_fp16)
 
     next_sent_acc, mask_lm_loss, total_loss = ernie.get_pretraining_output(
-        mask_label, mask_pos, labels, args.next_sen_coef)
+        mask_label, mask_pos, labels)
 
     if args.use_fp16 and args.loss_scaling > 1.0:
         total_loss *= args.loss_scaling
@@ -87,9 +87,7 @@ def predict_wrapper(args,
         shuffle_files=False,
         epoch=1,
         max_seq_len=args.max_seq_len,
-        is_test=True,
-        in_tokens=args.in_tokens,
-        is_bidirection=args.is_bidirection)
+        is_test=True)
 
     if args.do_test:
         assert args.init_checkpoint is not None, "[FATAL] Please use --init_checkpoint '/path/to/checkpoints' \
@@ -208,12 +206,8 @@ def train(args):
 
     print("Device count %d" % dev_count)
     print("theoretical memory usage: ")
-    if args.in_tokens:
-        print(fluid.contrib.memory_usage(
-            program=train_program, batch_size=args.batch_size // args.max_seq_len))
-    else:
-        print(fluid.contrib.memory_usage(
-            program=train_program, batch_size=args.batch_size))
+    print(fluid.contrib.memory_usage(
+        program=train_program, batch_size=args.batch_size // args.max_seq_len))
 
     nccl2_num_trainers = 1
     nccl2_trainer_id = 0
@@ -257,9 +251,7 @@ def train(args):
         voc_size=ernie_config['vocab_size'],
         epoch=args.epoch,
         max_seq_len=args.max_seq_len,
-        generate_neg_sample=args.generate_neg_sample,
-        in_tokens=args.in_tokens,
-        is_bidirection=args.is_bidirection)
+        generate_neg_sample=args.generate_neg_sample)
 
     exec_strategy = fluid.ExecutionStrategy()
     if args.use_fast_executor:

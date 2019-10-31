@@ -237,7 +237,7 @@ class ClassifyReader(BaseReader):
         batch_position_ids = [record.position_ids for record in batch_records]
         batch_labels = [record.label_id for record in batch_records]
         batch_labels = np.array(batch_labels).astype("int64").reshape([-1, 1])
-
+        #print(batch_token_ids)
         if batch_records[0].qid:
             batch_qids = [record.qid for record in batch_records]
             batch_qids = np.array(batch_qids).astype("int64").reshape([-1, 1])
