@@ -54,8 +54,8 @@ def main(args):
         in_tokens=args.in_tokens,
         random_seed=args.random_seed)
 
-    if not (args.do_train or args.do_val or args.do_test):
-        raise ValueError("For args `do_train`, `do_val` and `do_test`, at "
+    if not (args.do_train or args.do_val or args.do_test or args.do_infer):
+        raise ValueError("For args `do_train`, `do_val`, `do_test` and `do infer`, at "
                          "least one of them must be True.")
 
     startup_prog = fluid.Program()
@@ -124,7 +124,7 @@ def main(args):
             print("Theoretical memory usage in training: %.3f - %.3f %s" %
                   (lower_mem, upper_mem, unit))
 
-    if args.do_val or args.do_test:
+    if args.do_val or args.do_test or args.do_infer:
         test_prog = fluid.Program()
         with fluid.program_guard(test_prog, startup_prog):
             with fluid.unique_name.guard():
