@@ -24,7 +24,7 @@ from six.moves import xrange
 import paddle.fluid as fluid
 import AUC
 from model.ernie import ErnieModel
-
+import os
 
 def create_model(args, pyreader_name, ernie_config, is_prediction=False):
     pyreader = fluid.layers.py_reader(
@@ -186,6 +186,9 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
         graph_vars["num_seqs"].name, graph_vars["qids"].name
     ]
     batch_id = 0
+    if eval_phase == "infer":
+        os.remove("predict_scores.txt")
+
     while True:
         try:
             batch_id += 1
