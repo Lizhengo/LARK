@@ -55,6 +55,7 @@ data_g = ArgumentGroup(parser, "data", "Data paths, vocab paths and data process
 data_g.add_arg("train_set",           str,  None,  "Path to training data.")
 data_g.add_arg("test_set",            str,  None,  "Path to test data.")
 data_g.add_arg("dev_set",             str,  None,  "Path to validation data.")
+data_g.add_arg("infer_set",             str,  None,  "Path to inference data.")
 data_g.add_arg("vocab_path",          str,  None,  "Vocabulary path.")
 data_g.add_arg("max_seq_len",         int,  512,   "Number of words of the longest seqence.")
 data_g.add_arg("batch_size",          int,  32,    "Total examples' number in batch for training. see also --in_tokens.")
@@ -74,5 +75,6 @@ run_type_g.add_arg("num_iteration_per_drop_scope", int,    10,    "Iteration int
 run_type_g.add_arg("do_train",                     bool,   True,  "Whether to perform training.")
 run_type_g.add_arg("do_val",                       bool,   True,  "Whether to perform evaluation on dev data set.")
 run_type_g.add_arg("do_test",                      bool,   True,  "Whether to perform evaluation on test data set.")
+run_type_g.add_arg("do_infer",                      bool,   True,  "Whether to perform prediction on infer data set.")
 run_type_g.add_arg("metrics",                      bool,   True,  "Whether to perform evaluation on test data set.")
 # yapf: enable

@@ -293,6 +293,15 @@ def main(args):
         print("Final test result:")
         evaluate(exe, test_prog, test_pyreader, graph_vars, "test")
 
+    # final infer on infer set                                    
+    if args.do_infer:
+        test_pyreader.decorate_tensor_provider(                 
+            reader.data_generator(                              
+                args.infer_set,                                  
+                batch_size=args.batch_size,                     
+                epoch=1,                                        
+                shuffle=False))                                 
+        evaluate(exe, test_prog, test_pyreader, graph_vars, "infer")
 
 if __name__ == '__main__':
     print_arguments(args)

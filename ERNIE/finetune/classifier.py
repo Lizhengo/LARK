@@ -25,7 +25,6 @@ import paddle.fluid as fluid
 import AUC
 from model.ernie import ErnieModel
 
-print_score=False
 
 def create_model(args, pyreader_name, ernie_config, is_prediction=False):
     pyreader = fluid.layers.py_reader(
@@ -208,7 +207,7 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
             total_label_neg_num += np.sum(np_labels == 0)
             total_pred_neg_num += np.sum(np_preds == 0)
 
-            if print_score: 
+            if eval_phase == "infer": 
                 if (batch_id % 100) == 0:
                     fs = open("predict_scores.txt", "a+")
                     for score in scores:
@@ -221,11 +220,12 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
             test_pyreader.reset()
             break
     
-    if print_score:
+    if eval_phase == "infer":
         fs = open("predict_scores.txt", "a+")
         for score in scores:
             fs.write(str(score) + "\n")
         fs.close()
+        return
 
     time_end = time.time()
     
