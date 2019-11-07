@@ -187,7 +187,10 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
     ]
     batch_id = 0
     if eval_phase == "infer":
-        os.remove("predict_scores.txt")
+        try:
+            os.remove("predict_scores.txt")
+        except:
+            pass
 
     while True:
         try:
