@@ -154,7 +154,7 @@ def main(args):
                 args.init_pretraining_params,
                 main_program=startup_prog,
                 use_fp16=args.use_fp16)
-    elif args.do_val or args.do_test:
+    elif args.do_val or args.do_test or args.do_infer:
         if not args.init_checkpoint:
             raise ValueError("args 'init_checkpoint' should be set if"
                              "only doing validation or testing!")
